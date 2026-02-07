@@ -3,14 +3,16 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { motion } from "framer-motion";
-import { Loader2, CheckCircle, AlertCircle } from "lucide-react";
-import { useState } from "react";
+import { Loader2, CheckCircle, AlertCircle, ChevronDown, Search } from "lucide-react";
+import { useState, useMemo } from "react";
 import { toast } from "sonner";
+import { countryCodes } from "@/config/countryCodes";
 
 const contactSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
-  phone: z.string().min(10, "Phone number must be at least 10 digits").regex(/^\d+$/, "Phone must contain only numbers"),
+  countryCode: z.string().min(1, "Country code is required"),
+  phone: z.string().min(6, "Phone number must be valid").regex(/^\d+$/, "Phone must contain only numbers"),
   message: z.string().min(20, "Inquiry must be at least 20 characters"),
 });
 
@@ -19,39 +21,67 @@ type ContactFormData = z.infer<typeof contactSchema>;
 export default function ContactCard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState(countryCodes[0]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Filter countries based on search query
+  const filteredCountries = useMemo(() => {
+    if (!searchQuery.trim()) return countryCodes;
+    
+    const query = searchQuery.toLowerCase();
+    return countryCodes.filter(
+      (country) =>
+        country.country.toLowerCase().includes(query) ||
+        country.code.toLowerCase().includes(query)
+    );
+  }, [searchQuery]);
   
   const {
     register,
     handleSubmit,
     formState: { errors, isValid },
     reset,
+    setValue,
   } = useForm<ContactFormData>({
     resolver: zodResolver(contactSchema),
     mode: "onChange",
+    defaultValues: {
+      countryCode: countryCodes[0].code,
+    },
   });
 
   const onSubmit = async (data: ContactFormData) => {
     setIsSubmitting(true);
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      
-      console.log("Form Data:", data);
+      const response = await fetch("/api/submit-contact", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to submit inquiry");
+      }
+
       setIsSuccess(true);
-      toast.success("🚀 Message received! Dev will contact you within 24 hours.");
-      reset();
+      toast.success("🚀 Inquiry sent! Check your email for confirmation.");
+      reset({ countryCode: countryCodes[0].code });
+      setSelectedCountry(countryCodes[0]);
       
-      // Reset success state after 5 seconds
       setTimeout(() => setIsSuccess(false), 5000);
     } catch (error) {
-      toast.error("Something went wrong. Please try again.");
+      toast.error(error instanceof Error ? error.message : "Something went wrong. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <section className="py-24 bg-obsidian px-6 relative overflow-hidden">
+    <section id="contact" className="py-24 bg-obsidian px-6 relative overflow-hidden">
       {/* Background Elements */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(251,191,36,0.05),_transparent_60%)]" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,_rgba(59,130,246,0.05),_transparent_60%)]" />
@@ -142,12 +172,13 @@ export default function ContactCard() {
                   </motion.div>
                   <h3 className="text-2xl font-bold text-white mb-3">Message Received!</h3>
                   <p className="text-gray-400 mb-6">
-                    Thanks for reaching out. I'll review your inquiry and get back to you soon.
+                    Thanks for reaching out. Your inquiry has been recorded and automatically sent to my email. I'll contact you soon!
                   </p>
                   <button
                     onClick={() => {
                       setIsSuccess(false);
-                      reset();
+                      reset({ countryCode: countryCodes[0].code });
+                      setSelectedCountry(countryCodes[0]);
                     }}
                     className="px-6 py-2 rounded-lg border border-monster text-monster hover:bg-monster/10 font-semibold transition-colors"
                   >
@@ -158,10 +189,10 @@ export default function ContactCard() {
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                   {/* Name Field */}
                   <div>
-                    <label className="block text-sm font-semibold text-white mb-2">Full Name *</label>
+                    <label className="block text-sm font-semibold text-white mb-2">Full Name*</label>
                     <input
                       {...register("name")}
-                      placeholder="Devendra"
+                      placeholder="Your name"
                       className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-monster focus:ring-2 focus:ring-monster/20 transition-all"
                       disabled={isSubmitting}
                     />
@@ -177,58 +208,127 @@ export default function ContactCard() {
                     )}
                   </div>
 
-                  {/* Email & Phone Grid */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-white mb-2">Email *</label>
-                      <input
-                        {...register("email")}
-                        type="email"
-                        placeholder="you@company.com"
-                        className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-monster focus:ring-2 focus:ring-monster/20 transition-all"
-                        disabled={isSubmitting}
-                      />
-                      {errors.email && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="flex items-center gap-2 mt-2 text-red-400 text-sm"
-                        >
-                          <AlertCircle className="w-4 h-4" />
-                          {errors.email.message}
-                        </motion.div>
-                      )}
-                    </div>
+                  {/* Email Field */}
+                  <div>
+                    <label className="block text-sm font-semibold text-white mb-2">Email*</label>
+                    <input
+                      {...register("email")}
+                      type="email"
+                      placeholder="you@company/email.com"
+                      className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-monster focus:ring-2 focus:ring-monster/20 transition-all"
+                      disabled={isSubmitting}
+                    />
+                    {errors.email && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex items-center gap-2 mt-2 text-red-400 text-sm"
+                      >
+                        <AlertCircle className="w-4 h-4" />
+                        {errors.email.message}
+                      </motion.div>
+                    )}
+                  </div>
 
-                    <div>
-                      <label className="block text-sm font-semibold text-white mb-2">Phone *</label>
+                  {/* Phone with Country Code */}
+                  <div>
+                    <label className="block text-sm font-semibold text-white mb-2">Phone*</label>
+                    <div className="flex gap-3">
+                      {/* Country Code Dropdown */}
+                      <div className="relative w-32">
+                        <button
+                          type="button"
+                          onClick={() => setShowDropdown(!showDropdown)}
+                          className="w-full px-3 py-3 rounded-lg bg-white/5 border border-white/10 text-white hover:border-monster/50 focus:outline-none focus:border-monster focus:ring-2 focus:ring-monster/20 transition-all flex items-center justify-between"
+                        >
+                          <span className="text-sm font-semibold">{selectedCountry.code}</span>
+                          <ChevronDown className="w-4 h-4" />
+                        </button>
+
+                        {showDropdown && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="absolute top-full left-0 right-0 mt-2 bg-cardbg border border-white/10 rounded-lg shadow-xl z-50 w-72"
+                          >
+                            {/* Search Input */}
+                            <div className="sticky top-0 p-3 border-b border-white/5 bg-cardbg/95 backdrop-blur-sm rounded-t-lg">
+                              <div className="relative">
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <input
+                                  type="text"
+                                  placeholder="Search country..."
+                                  value={searchQuery}
+                                  onChange={(e) => setSearchQuery(e.target.value)}
+                                  className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 text-white placeholder-gray-500 rounded-lg focus:outline-none focus:border-monster focus:ring-1 focus:ring-monster/20 text-sm transition-all"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Country List */}
+                            <div className="max-h-64 overflow-y-auto">
+                              {filteredCountries.length > 0 ? (
+                                filteredCountries.map((country, idx) => (
+                                  <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedCountry(country);
+                                      setValue("countryCode", country.code);
+                                      setShowDropdown(false);
+                                      setSearchQuery("");
+                                    }}
+                                    className="w-full px-4 py-2 text-left text-sm text-white hover:bg-monster/20 transition-colors flex items-center gap-2 border-b border-white/5 last:border-b-0"
+                                  >
+                                    <span className="text-base">{country.flag}</span>
+                                    <span className="font-semibold min-w-12">{country.code}</span>
+                                    <span className="text-gray-400 text-xs truncate">{country.country}</span>
+                                  </button>
+                                ))
+                              ) : (
+                                <div className="px-4 py-8 text-center text-gray-400 text-sm">
+                                  No countries found
+                                </div>
+                              )}
+                            </div>
+                          </motion.div>
+                        )}
+                      </div>
+
+                      {/* Phone Number Input */}
+                      <input
+                        {...register("countryCode")}
+                        type="hidden"
+                        value={selectedCountry.code}
+                      />
                       <input
                         {...register("phone")}
                         type="tel"
-                        placeholder="Your phone number"
-                        className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-monster focus:ring-2 focus:ring-monster/20 transition-all"
+                        placeholder="Phone number"
+                        className="flex-1 px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-monster focus:ring-2 focus:ring-monster/20 transition-all"
                         disabled={isSubmitting}
                       />
-                      {errors.phone && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="flex items-center gap-2 mt-2 text-red-400 text-sm"
-                        >
-                          <AlertCircle className="w-4 h-4" />
-                          {errors.phone.message}
-                        </motion.div>
-                      )}
                     </div>
+                    {errors.phone && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex items-center gap-2 mt-2 text-red-400 text-sm"
+                      >
+                        <AlertCircle className="w-4 h-4" />
+                        {errors.phone.message}
+                      </motion.div>
+                    )}
                   </div>
 
                   {/* Message Field */}
                   <div>
-                    <label className="block text-sm font-semibold text-white mb-2">Project Inquiry *</label>
+                    <label className="block text-sm font-semibold text-white mb-2">Project Inquiry*</label>
                     <textarea
                       {...register("message")}
-                      placeholder="Tell me about your project, goals, and timeline..."
-                      className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-monster focus:ring-2 focus:ring-monster/20 transition-all resize-none min-h-[120px]"
+                      placeholder="Tell me about your needs, project goals & any specific requirements..."
+                      className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-monster focus:ring-2 focus:ring-monster/20 transition-all resize-none min-h-[100px]"
                       disabled={isSubmitting}
                     />
                     {errors.message && (
@@ -265,7 +365,7 @@ export default function ContactCard() {
                   </motion.button>
 
                   <p className="text-xs text-gray-500 text-center">
-                    I'll respond within 24 hours. No spam, ever.
+                    Your details will be tracked automatically. No spam, ever.
                   </p>
                 </form>
               )}
